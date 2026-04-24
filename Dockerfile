@@ -1,7 +1,7 @@
 FROM python:3.9-slim
-LABEL maintainer="Wania Masood"
-LABEL version="1.0"
-LABEL description="Optimized Sakila Flask App"
+LABEL maintainer="zirwaomar2@gmail.com" \
+      version="1.0.0" \
+      description="Sakila Flask Application - Optimized Production Image"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 RUN adduser --disabled-password --gecos "" appuser
