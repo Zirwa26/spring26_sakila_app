@@ -32,7 +32,7 @@ services:
     container_name: sakila-app
     restart: on-failure
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       MYSQL_HOST: db
       MYSQL_USER: ${MYSQL_USER}
