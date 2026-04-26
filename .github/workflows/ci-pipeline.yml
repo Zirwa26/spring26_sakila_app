@@ -17,6 +17,7 @@ env:
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +25,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - run: pip install flake8
+      - name: Install flake8
+        run: pip install flake8
 
-      # ✅ force green (ignore lint errors)
-      - run: |
+      # ✅ THIS LINE MAKES IT ALWAYS PASS
+      - name: Run flake8 (ignore errors)
+        run: |
           flake8 . --max-line-length=120 --extend-ignore=E501,W503 --exclude=.git,__pycache__ --count --statistics || true
 
   test:
@@ -53,14 +56,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - run: |
+      - name: Install dependencies
+        run: |
           pip install -r requirements.txt pytest
+
+      - name: Load database
+        run: |
           curl -L -o s.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-schema.sql
           curl -L -o d.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-insert-data.sql
           mysql -h 127.0.0.1 -u root -padmin sakila < s.sql
           mysql -h 127.0.0.1 -u root -padmin sakila < d.sql
 
-      - run: pytest tests/ -v
+      - name: Run tests
+        run: pytest tests/ -v
 
   build:
     runs-on: ubuntu-latest
@@ -69,10 +77,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: |
+      - name: Build & run container
+        run: |
           docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
-          docker run -d --name smoke -p 5000:5000 ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          sleep 10 && curl -f http://localhost:5000 || echo "App started"
+          docker run -d --name app -p 5000:5000 ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          sleep 10
+          curl -f http://localhost:5000
 
   security-scan:
     runs-on: ubuntu-latest
@@ -81,16 +91,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - run: docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+      - name: Build image
+        run: docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
 
-      - uses: aquasecurity/trivy-action@master
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}:${{ github.sha }}"
           format: "table"
           output: "trivy-report.txt"
           exit-code: "0"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload report
+        uses: actions/upload-artifact@v4
         with:
           name: trivy-security-report
           path: trivy-report.txt
