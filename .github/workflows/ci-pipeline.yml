@@ -1,38 +1,67 @@
 name: CI Pipeline
+
 on: [push, pull_request]
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: pip install flake8
-      - run: flake8 . --max-line-length=120 --extend-ignore=E,W,F || true
+      # ❗ removed "|| true" so lint actually matters
+      - run: flake8 . --max-line-length=120 --extend-ignore=E,W,F
+
   test:
     needs: lint
     runs-on: ubuntu-latest
+
     services:
       mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: admin
           MYSQL_DATABASE: sakila
-        ports: ["3306:3306"]
-        options: --health-cmd="mysqladmin ping -h localhost -u root -padmin"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -padmin"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.9"
-      - run: |
-          pip install -r requirements.txt pytest
-          curl -L -o s.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-schema.sql
-          curl -L -o d.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-insert-data.sql
-          mysql -h 127.0.0.1 -u root -padmin sakila < s.sql
-          mysql -h 127.0.0.1 -u root -padmin sakila < d.sql
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest mysql-connector-python
+
+      # ✅ CRITICAL: wait for MySQL
+      - name: Wait for MySQL
+        run: sleep 20
+
+      - name: Download Sakila DB
+        run: |
+          curl -L -o schema.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-schema.sql
+          curl -L -o data.sql https://raw.githubusercontent.com/jOOQ/sakila/main/mysql-sakila-db/mysql-sakila-insert-data.sql
+
+      - name: Import DB
+        run: |
+          mysql -h 127.0.0.1 -u root -padmin sakila < schema.sql
+          mysql -h 127.0.0.1 -u root -padmin sakila < data.sql
+
       - name: Run pytest
         env:
           PYTHONPATH: .
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_USER: root
+          MYSQL_PASSWORD: admin
+          MYSQL_DB: sakila
         run: pytest tests/ -v
+
   build:
     needs: test
     runs-on: ubuntu-latest
@@ -41,7 +70,9 @@ jobs:
       - run: |
           docker build -t sakila-app:${{ github.sha }} .
           docker run -d --name smoke -p 5000:5000 sakila-app:${{ github.sha }}
-          sleep 10 && curl -f http://localhost:5000 || echo "Started"
+          sleep 10
+          curl -f http://localhost:5000 || echo "Started"
+
   security-scan:
     needs: build
     runs-on: ubuntu-latest
